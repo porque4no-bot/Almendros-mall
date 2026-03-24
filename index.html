@@ -32,29 +32,52 @@
   }
 </script>
 <style>
+  :root {
+    --bg-primary: #0D0D0D;
+    --bg-secondary: #1A1A1A;
+    --text-primary: #FFFFFF;
+    --text-secondary: #E2E8F0;
+    --text-muted: #94A3B8;
+    --grid-color: rgba(255,255,255,0.08);
+    --card-bg: rgba(255,255,255,0.07);
+    --card-border: rgba(255,255,255,0.15);
+  }
+
+  body.light-mode {
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F5F5F5;
+    --text-primary: #1A1A1A;
+    --text-secondary: #4A5568;
+    --text-muted: #A0AEC0;
+    --grid-color: rgba(0,0,0,0.05);
+    --card-bg: rgba(211, 34, 55, 0.08);
+    --card-border: rgba(211, 34, 55, 0.2);
+  }
+
   body {
     margin: 0;
-    background-color: #0D0D0D;
-    color: #FFFFFF;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
     font-family: 'Poppins', sans-serif;
+    transition: background-color 0.3s, color 0.3s;
   }
   input[type=number]::-webkit-inner-spin-button { opacity: 1; }
   .sthin::-webkit-scrollbar { width: 6px; height: 6px; }
   .sthin::-webkit-scrollbar-thumb { background: #D32237; border-radius: 999px; }
   .berlin-card {
-    background: rgba(255,255,255,0.07);
-    border: 1px solid rgba(255,255,255,0.15);
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
     backdrop-filter: blur(12px);
   }
   .transition-all { transition: all 0.3s cubic-bezier(0.4,0,0.2,1); }
   .bg-grid {
     background-image:
-      linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+      linear-gradient(var(--grid-color) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
     background-size: 30px 30px;
   }
-  .text-secondary { color: #E2E8F0; }
-  .text-muted { color: #94A3B8; }
+  .text-secondary { color: var(--text-secondary); }
+  .text-muted { color: var(--text-muted); }
 </style>
 </head>
 <body class="bg-grid">
@@ -106,7 +129,7 @@ const ITEMS = {
   FUSTE_B:     { code:"3,003,4",   ref:"6703", billKey:"vF",    unit:"m3", name:"FUSTE EN CONCRETO" },
   CAMPANA_A:   { code:"3,003,2",   ref:"2463", billKey:"vC",    unit:"m3", name:"CAMPANA EN CONCRETO" },
   CAMPANA_B:   { code:"3,003,2",   ref:"6703", billKey:"vC",    unit:"m3", name:"CAMPANA EN CONCRETO" },
-  ACERO:       { code:"3,003,6",   ref:"2236", billKey:"acero", unit:"kg", name:"ACERO DE REFUERZO CAISSON" },
+  ACERO:       { code:"3,003,6",   ref:"2236", billKey:"acero", unit:"kg", name:"ACERO DE REFUERZO CAISSON - 12 N7 DE 6 M 12.7.600" },
 };
 
 const CAISSONS = [
@@ -415,6 +438,7 @@ function App() {
   const [filter, setFilter]       = useState("all");
   const [selActa, setSelActa]     = useState(null);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const d = new Date(selDate);
     return { year: d.getFullYear(), month: d.getMonth() };
@@ -804,6 +828,17 @@ function App() {
               title="Eliminar registro"
             >
               🗑️ Eliminar
+            </button>
+
+            <button
+              onClick={() => {
+                setIsDarkMode(!isDarkMode);
+                document.body.classList.toggle('light-mode');
+              }}
+              className="bg-white/10 border border-white/20 px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 hover:bg-white/20"
+              title={isDarkMode ? "Modo Diurno" : "Modo Nocturno"}
+            >
+              {isDarkMode ? '☀️ Diurno' : '🌙 Nocturno'}
             </button>
           </div>
         </div>
