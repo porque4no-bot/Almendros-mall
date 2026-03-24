@@ -1,10 +1,8 @@
 {
-  "buildCommand": "echo 'Static site'",
-  "outputDirectory": ".",
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/api"
     }
   ]
 }
