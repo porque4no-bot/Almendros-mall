@@ -59,6 +59,28 @@
 </head>
 <body class="bg-grid">
 <div id="root"></div>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCv62PX9S6awmninPFVXzYEr_RM0Jl-3Xg",
+    authDomain: "almendros-mall.firebaseapp.com",
+    projectId: "almendros-mall",
+    storageBucket: "almendros-mall.firebasestorage.app",
+    messagingSenderId: "160015483102",
+    appId: "1:160015483102:web:7f801fe29353ef55f7c24f"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Exponer a window para que el script de Babel pueda acceder
+  window.firebaseDb = db;
+  window.firebaseDoc = doc;
+  window.firebaseGetDoc = getDoc;
+  window.firebaseSetDoc = setDoc;
+</script>
 <script type="text/babel">
 const { useState, useMemo, useCallback, useEffect, useRef } = React;
 
@@ -382,19 +404,11 @@ function StatCard({ label, value, color, delta, icon, subtext }) {
 }
 
 // ─── App Principal ────────────────────────────────────────────────────────────
-const STORAGE_KEY = "berlin-infra-v1-contrast";
 
 function App() {
-  const [dailyLog, setDailyLog] = useState(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return JSON.parse(raw).dailyLog || {};
-    } catch(e) {}
-    return { [getToday()]: Object.fromEntries(CAISSONS.map(c => [c.k, defEntry(c)])) };
-  });
-  const [actas, setActas] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY))?.actas || []; } catch(e) { return []; }
-  });
+  const [dailyLog, setDailyLog] = useState({ [getToday()]: Object.fromEntries(CAISSONS.map(c => [c.k, defEntry(c)])) });
+  const [actas, setActas] = useState([]);
+  const [loadingFirebase, setLoadingFirebase] = useState(true);
   const [selDate, setSelDate]     = useState(getToday());
   const [selK, setSelK]           = useState(null);
   const [viewMode, setViewMode]   = useState("plano");
@@ -406,9 +420,57 @@ function App() {
     return { year: d.getFullYear(), month: d.getMonth() };
   });
 
+  // Cargar datos de Firestore al montar
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ dailyLog, actas }));
-  }, [dailyLog, actas]);
+    if (!window.firebaseDb || !window.firebaseGetDoc || !window.firebaseDoc) {
+      console.log("Firebase no está inicializado aún");
+      setLoadingFirebase(false);
+      return;
+    }
+
+    const loadFromFirestore = async () => {
+      try {
+        const docRef = window.firebaseDoc(window.firebaseDb, "proyecto", "almendros-mall");
+        const docSnap = await window.firebaseGetDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.dailyLog) setDailyLog(data.dailyLog);
+          if (data.actas) setActas(data.actas);
+          console.log("Datos cargados desde Firestore");
+        } else {
+          console.log("No hay datos en Firestore aún, usando valores por defecto");
+        }
+      } catch (error) {
+        console.error("Error cargando de Firestore:", error);
+      } finally {
+        setLoadingFirebase(false);
+      }
+    };
+
+    loadFromFirestore();
+  }, []);
+
+  // Guardar datos a Firestore cuando cambien
+  useEffect(() => {
+    if (loadingFirebase || !window.firebaseDb || !window.firebaseSetDoc || !window.firebaseDoc) return;
+
+    const saveToFirestore = async () => {
+      try {
+        const docRef = window.firebaseDoc(window.firebaseDb, "proyecto", "almendros-mall");
+        await window.firebaseSetDoc(docRef, {
+          dailyLog,
+          actas,
+          lastUpdated: new Date().toISOString()
+        }, { merge: true });
+        console.log("Datos guardados en Firestore");
+      } catch (error) {
+        console.error("Error guardando a Firestore:", error);
+      }
+    };
+
+    saveToFirestore();
+  }, [dailyLog, actas, loadingFirebase]);
 
   const sortedDates = useMemo(() => Object.keys(dailyLog).sort(), [dailyLog]);
 
@@ -576,6 +638,20 @@ function App() {
     const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
     return `${months[calendarMonth.month]} ${calendarMonth.year}`;
   }, [calendarMonth]);
+
+  // Mostrar loader mientras se carga Firebase
+  if (loadingFirebase) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-brand-black">
+        <div className="text-center">
+          <div className="inline-block animate-spin mb-4">
+            <div className="w-12 h-12 border-4 border-brand-red/20 border-t-brand-red rounded-full"></div>
+          </div>
+          <p className="text-white/60 text-sm">Conectando a Firestore...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pb-16">
