@@ -38,6 +38,7 @@
     --text-primary: #FFFFFF;
     --text-secondary: #E2E8F0;
     --text-muted: #94A3B8;
+    --text-white: #FFFFFF;
     --grid-color: rgba(255,255,255,0.08);
     --card-bg: rgba(255,255,255,0.07);
     --card-border: rgba(255,255,255,0.15);
@@ -47,11 +48,24 @@
     --bg-primary: #FFFFFF;
     --bg-secondary: #F5F5F5;
     --text-primary: #1A1A1A;
-    --text-secondary: #4A5568;
-    --text-muted: #A0AEC0;
+    --text-secondary: #2D3748;
+    --text-muted: #718096;
+    --text-white: #1A1A1A;
     --grid-color: rgba(0,0,0,0.05);
-    --card-bg: rgba(211, 34, 55, 0.08);
-    --card-border: rgba(211, 34, 55, 0.2);
+    --card-bg: rgba(211, 34, 55, 0.06);
+    --card-border: rgba(211, 34, 55, 0.25);
+  }
+
+  body.light-mode .text-white,
+  body.light-mode .text-white\/50,
+  body.light-mode .text-white\/60,
+  body.light-mode .text-white\/80 {
+    color: var(--text-white) !important;
+  }
+
+  body.light-mode svg text[fill="#FFFFFF"],
+  body.light-mode svg text[fill="white"] {
+    fill: #1A1A1A;
   }
 
   body {
