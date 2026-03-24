@@ -56,16 +56,35 @@
     --card-border: rgba(211, 34, 55, 0.25);
   }
 
+  body.light-mode {
+    --text-white: #1A1A1A;
+  }
+
   body.light-mode .berlin-card {
     background: transparent !important;
   }
 
-  body.light-mode .text-muted {
+  body.light-mode .text-white,
+  body.light-mode .text-white\/50,
+  body.light-mode .text-white\/60,
+  body.light-mode .text-white\/80 {
     color: #1A1A1A !important;
   }
 
-  body.light-mode svg text[fill="#5A5F6F"] {
+  body.light-mode .text-muted,
+  body.light-mode .text-secondary {
+    color: #2D3748 !important;
+  }
+
+  body.light-mode svg text[fill="#FFFFFF"],
+  body.light-mode svg text[fill="white"],
+  body.light-mode svg text[fill="#5A5F6F"],
+  body.light-mode svg text[fill="#475569"] {
     fill: #1A1A1A !important;
+  }
+
+  body.light-mode .uppercase {
+    color: #1A1A1A !important;
   }
 
   body {
