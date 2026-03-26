@@ -211,7 +211,14 @@ const CAISSON_COORDS = (() => {
 // ─── Utilidades / Lógica ─────────────────────────────────────────────────────
 const stColor = s => s === "completed" ? "#80AF96" : s === "active" ? "#FBC202" : "#64748B";
 const getToday = () => new Date().toISOString().split("T")[0];
-const defEntry = c => ({ exc:0, anillos:0, restante:c.prof+0.58, desplante:0.58, sueloNatural:0, preop:false, armado:false, remate:false });
+const defEntry = c => ({ exc:0, anillos:0, restante:c.prof+0.58, desplante:0.58, sueloNatural:0, preop:false, armado:false, remate:false,
+  bloqueadoRoca:false,
+  observaciones:"",
+  imagenBase64:"",
+  barrasColocadas:0,
+  vueltasChipa:0,
+  remateChecks:{ nivelacion:false, plomada:false, recubrimiento:false, superficie:false, curado:false }
+});
 const findC = k => CAISSON_MAP[k] || CAISSONS[0];
 const getCDef = c => REND.campana[c.campana.toFixed(1)] || REND.campana["2.0"];
 const clamp = (v, mn, mx) => Math.max(mn, Math.min(mx, v));
@@ -527,7 +534,9 @@ function App() {
   );
 
   const handleUpdate = useCallback((k, field, val) => {
-    const v = typeof val === "boolean" ? val : (parseFloat(val) || 0);
+    const v = typeof val === "boolean" ? val
+      : typeof val === "string" && field !== "observaciones" && field !== "imagenBase64" ? (parseFloat(val) || 0)
+      : val;
     setDailyLog(prev => ({
       ...prev,
       [selDate]: {
@@ -535,6 +544,20 @@ function App() {
         [k]: { ...((prev[selDate] || {})[k] || defEntry(findC(k))), [field]: v }
       }
     }));
+  }, [selDate]);
+
+  const handleRemateCheck = useCallback((k, checkKey, val) => {
+    setDailyLog(prev => {
+      const entry = (prev[selDate] && prev[selDate][k]) ? prev[selDate][k] : defEntry(findC(k));
+      const checks = { ...(entry.remateChecks || { nivelacion:false, plomada:false, recubrimiento:false, superficie:false, curado:false }), [checkKey]: val };
+      return {
+        ...prev,
+        [selDate]: {
+          ...(prev[selDate] || {}),
+          [k]: { ...entry, remateChecks: checks }
+        }
+      };
+    });
   }, [selDate]);
 
   const dash = useMemo(() => {
@@ -997,14 +1020,20 @@ function App() {
                         const pct = c.gP;
                         const arc = (pct/100)*CIRC;
                         const isSel = selK === c.k;
+                        const entryData = (dailyLog[selDate] && dailyLog[selDate][c.k]) ? dailyLog[selDate][c.k] : defEntry(findC(c.k));
+                        const isBlocked = entryData.bloqueadoRoca;
                         return (
                           <g key={c.k} className="cursor-pointer" onClick={() => setSelK(c.k)}>
                             {/* cell bg on select */}
                             {isSel && <rect x={cx-CW/2+4} y={cy-CH/2+4} width={CW-8} height={CH-8}
                               rx="10" fill={col} fillOpacity="0.08"/>}
+                            {/* BLOQUEADO POR ROCA red warning ring */}
+                            {isBlocked && <circle cx={cx} cy={cy} r={CW*0.38}
+                              fill="rgba(211,34,55,0.08)" stroke="#D32237" strokeWidth="2.5"
+                              strokeDasharray="5,3" opacity="0.9"/>}
                             {/* campana footprint ring */}
                             <circle cx={cx} cy={cy} r={CW*0.36}
-                              fill="none" stroke={col} strokeWidth="1"
+                              fill="none" stroke={isBlocked ? "#D32237" : col} strokeWidth="1"
                               strokeDasharray="3,4" opacity="0.25"/>
                             {/* progress track */}
                             <circle cx={cx} cy={cy} r={R} fill="none"
@@ -1021,7 +1050,7 @@ function App() {
                             {/* center fill */}
                             <circle cx={cx} cy={cy} r={isSel ? 11 : 9}
                               fill={isSel ? col : "rgba(13,13,13,0.95)"}
-                              stroke={col} strokeWidth={isSel ? 0 : 1.5}/>
+                              stroke={isBlocked ? "#D32237" : col} strokeWidth={isSel ? 0 : 1.5}/>
                             {/* K label */}
                             <text x={cx} y={cy+3.5} textAnchor="middle"
                               fontSize="8.5" fontWeight="900"
@@ -1033,6 +1062,13 @@ function App() {
                             <text x={cx} y={cy+CH*0.42} textAnchor="middle"
                               fontSize="9.5" fontWeight="700"
                               fill={col} opacity="0.75">{pct.toFixed(0)+"%"}</text>
+                            {/* ROCA badge */}
+                            {isBlocked && (
+                              <g>
+                                <rect x={cx+10} y={cy-CH*0.42} width={28} height={11} rx="3" fill="#D32237"/>
+                                <text x={cx+24} y={cy-CH*0.42+8} textAnchor="middle" fontSize="7" fontWeight="900" fill="#fff">ROCA</text>
+                              </g>
+                            )}
                           </g>
                         );
                       })}
@@ -1065,14 +1101,56 @@ function App() {
                     {Object.keys(ITEMS).map(ik => {
                       const val = actaData[ik] || 0;
                       if (val <= 0.0001) return null;
+                      // Calculate delta en unidades for each item type
+                      const CAISSON_DIAM = 0.85;
+                      const CAISSON_AREA = Math.PI * Math.pow(CAISSON_DIAM / 2, 2); // ~0.567 m²
+                      let deltaExtra = null;
+                      if (ik.startsWith("EXC_")) {
+                        // For excavacion items: show m³ and m lineales
+                        const mLineal = val / REND.exc; // reverse rend
+                        deltaExtra = (
+                          <div className="flex gap-3 mt-1 flex-wrap">
+                            <span className="text-[8px] font-black text-brand-yellow">
+                              {val.toFixed(2)} m³ exc.
+                            </span>
+                            <span className="text-[8px] font-black text-brand-orange">
+                              ≈{mLineal.toFixed(2)} m lin.
+                            </span>
+                          </div>
+                        );
+                      } else if (ik === "ACERO") {
+                        // CASTILLOS: show number of units (castillos)
+                        const nCastillos = CAISSONS.filter(c => {
+                          const cur = calcC(c, (dailyLog[selActa] && dailyLog[selActa][c.k]) ? dailyLog[selActa][c.k] : defEntry(c));
+                          return cur.armado;
+                        }).length;
+                        deltaExtra = (
+                          <div className="mt-1">
+                            <span className="text-[8px] font-black text-brand-orange">
+                              {nCastillos} castillos colocados
+                            </span>
+                          </div>
+                        );
+                      } else if (ik === "FUSTE_A" || ik === "FUSTE_B") {
+                        // REMATE: show m² (approx. top surface × count)
+                        const m2 = val * (CAISSON_AREA / REND.fuste);
+                        deltaExtra = (
+                          <div className="mt-1">
+                            <span className="text-[8px] font-black text-brand-sage">
+                              ≈{m2.toFixed(2)} m² sup.
+                            </span>
+                          </div>
+                        );
+                      }
                       return (
-                        <div key={ik} className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex justify-between items-center gap-4">
+                        <div key={ik} className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex justify-between items-start gap-4">
                           <div className="flex flex-col min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-[10px] font-black text-brand-red shrink-0">{ITEMS[ik].code}</span>
                               <span className="text-[9px] font-black text-white/40 shrink-0">Ref.{ITEMS[ik].ref}</span>
                             </div>
                             <span className="text-[9px] text-muted truncate">{ITEMS[ik].name}</span>
+                            {deltaExtra}
                           </div>
                           <div className="text-right shrink-0">
                             <span className="text-sm font-black text-white">{val.toFixed(2)}</span>
@@ -1212,14 +1290,51 @@ function App() {
           {/* ── PANEL LATERAL ─────────────────────────────────────── */}
           <div className="lg:col-span-1">
             <div className="berlin-card rounded-3xl p-6 sticky top-24 max-h-[88vh] overflow-y-auto sthin">
-              {selData ? (
+              {selData ? (() => {
+                const selEntry = (dailyLog[selDate] && dailyLog[selDate][selData.k]) ? dailyLog[selDate][selData.k] : defEntry(findC(selData.k));
+                const isBlocked = selEntry.bloqueadoRoca || false;
+                const obs = selEntry.observaciones || "";
+                const imgB64 = selEntry.imagenBase64 || "";
+                const barras = selEntry.barrasColocadas || 0;
+                const vueltas = selEntry.vueltasChipa || 0;
+                const remChecks = selEntry.remateChecks || { nivelacion:false, plomada:false, recubrimiento:false, superficie:false, curado:false };
+                const remChecksCount = Object.values(remChecks).filter(Boolean).length;
+                const remChecksPct = Math.round((remChecksCount / 5) * 100);
+                // Refuerzo constants
+                const LONG_CHIPA = 35 * Math.PI * 0.85;   // ≈ 93.46 m
+                const PESO_CHIPA = LONG_CHIPA * 0.994;      // ≈ 92.9 kg
+                const PESO_LONG  = 12 * 6 * 3.973;          // ≈ 285.9 kg
+                const PESO_TOTAL = PESO_CHIPA + PESO_LONG;  // ≈ 378.8 kg
+                return (
                 <div className="space-y-6">
                   <div className="border-b border-white/10 pb-4">
                     <span className="text-[8px] font-black text-brand-red uppercase tracking-widest block mb-1">Unidad Seleccionada</span>
-                    <h2 className="text-4xl font-black tracking-tighter text-white">{"K-"+selData.k}</h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-4xl font-black tracking-tighter text-white">{"K-"+selData.k}</h2>
+                      {isBlocked && (
+                        <span className="bg-brand-red text-white text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-widest animate-pulse">
+                          ⛔ ROCA
+                        </span>
+                      )}
+                    </div>
                     <div className="inline-block mt-2 bg-white/5 px-2 py-1 rounded text-[9px] font-black uppercase text-secondary border border-white/10">
                       {selData.ey+"-"+selData.ex}
                     </div>
+                  </div>
+
+                  {/* ── BLOQUEO POR ROCA ── */}
+                  <div>
+                    <p className="text-[8px] font-black text-muted uppercase tracking-widest mb-2">Bloqueo por Roca</p>
+                    <button
+                      onClick={() => handleUpdate(selData.k, "bloqueadoRoca", !isBlocked)}
+                      className={`w-full flex items-center justify-between gap-3 p-3 rounded-xl border cursor-pointer transition font-black text-[10px] uppercase
+                        ${isBlocked ? 'bg-brand-red/20 border-brand-red text-brand-red' : 'bg-white/5 border-white/10 text-muted hover:bg-white/10'}`}
+                    >
+                      <span>{isBlocked ? '⛔ Bloqueado por Roca' : '🟢 Sin Bloqueo'}</span>
+                      <div className={`w-10 h-5 rounded-full transition-all relative ${isBlocked ? 'bg-brand-red' : 'bg-white/20'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${isBlocked ? 'left-5' : 'left-0.5'}`}></div>
+                      </div>
+                    </button>
                   </div>
 
                   <div className="bg-black/40 rounded-2xl p-4 border border-white/5 flex justify-center h-48">
@@ -1280,6 +1395,162 @@ function App() {
                     ))}
                   </div>
 
+                  {/* ── DETALLE DEL REFUERZO ── */}
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <p className="text-[8px] font-black text-brand-orange uppercase tracking-widest mb-3">Detalle del Refuerzo</p>
+                    <div className="space-y-2 text-[9px] font-black">
+                      <div className="text-muted uppercase tracking-wider">Armado Longitudinal</div>
+                      <div className="flex justify-between"><span className="text-white/60">Barras</span><span className="text-white">12 N°7 (ø22.2mm)</span></div>
+                      <div className="flex justify-between"><span className="text-white/60">Longitud</span><span className="text-white">6 m c/u</span></div>
+                      <div className="border-t border-white/10 mt-2 pt-2 text-muted uppercase tracking-wider">Chipa N°4 (ø12.7mm) · Espiral ø85cm</div>
+                      <div className="flex justify-between"><span className="text-white/60">Primeras 16 vueltas</span><span className="text-brand-yellow">@ 7.5 cm sep.</span></div>
+                      <div className="flex justify-between"><span className="text-white/60">Restantes 19 vueltas</span><span className="text-brand-yellow">@ 25 cm sep.</span></div>
+                      <div className="flex justify-between"><span className="text-white/60">Total vueltas</span><span className="text-white">35 vueltas</span></div>
+                      <div className="border-t border-white/10 mt-2 pt-2 text-muted uppercase tracking-wider">Resumen de Pesos</div>
+                      <div className="flex justify-between"><span className="text-white/60">Long. chipa total</span><span className="text-brand-sage">{LONG_CHIPA.toFixed(2)} m</span></div>
+                      <div className="flex justify-between"><span className="text-white/60">Peso chipa</span><span className="text-brand-sage">{PESO_CHIPA.toFixed(1)} kg</span></div>
+                      <div className="flex justify-between"><span className="text-white/60">Peso longitudinal</span><span className="text-brand-sage">{PESO_LONG.toFixed(1)} kg</span></div>
+                      <div className="flex justify-between border-t border-white/10 pt-2 mt-1"><span className="text-white font-black">Peso total armado</span><span className="text-brand-red text-sm">{PESO_TOTAL.toFixed(1)} kg</span></div>
+                    </div>
+                  </div>
+
+                  {/* ── CUMPLITUD ARMADO ── */}
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <p className="text-[8px] font-black text-brand-orange uppercase tracking-widest mb-3">Cumplitud del Armado (Castillo)</p>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex justify-between text-[9px] font-black mb-1">
+                          <span className="text-muted uppercase">Barras longitudinales</span>
+                          <span className="text-white">{barras}/12 colocadas</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-white/10 h-3 rounded-full overflow-hidden">
+                            <div className="bg-brand-orange h-full rounded-full transition-all" style={{width: Math.min(100, (barras/12)*100) + "%"}}></div>
+                          </div>
+                          <span className="text-[9px] font-black text-brand-orange w-8 text-right">{Math.round((barras/12)*100)}%</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <button onClick={() => handleUpdate(selData.k, "barrasColocadas", Math.max(0, barras-1))} className="w-6 h-6 bg-white/10 rounded text-white font-black text-xs hover:bg-white/20">−</button>
+                          <input type="number" min="0" max="12" value={barras}
+                            onChange={e => handleUpdate(selData.k, "barrasColocadas", Math.min(12, Math.max(0, parseInt(e.target.value)||0)))}
+                            className="w-12 text-center bg-white/5 border border-white/10 rounded text-white text-[11px] font-black py-1 outline-none"/>
+                          <button onClick={() => handleUpdate(selData.k, "barrasColocadas", Math.min(12, barras+1))} className="w-6 h-6 bg-white/10 rounded text-white font-black text-xs hover:bg-white/20">+</button>
+                          <span className="text-[8px] text-muted">/ 12 barras N°7</span>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-[9px] font-black mb-1">
+                          <span className="text-muted uppercase">Vueltas de chipa</span>
+                          <span className="text-white">{vueltas}/35 vueltas</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-white/10 h-3 rounded-full overflow-hidden">
+                            <div className="bg-brand-yellow h-full rounded-full transition-all" style={{width: Math.min(100, (vueltas/35)*100) + "%"}}></div>
+                          </div>
+                          <span className="text-[9px] font-black text-brand-yellow w-8 text-right">{Math.round((vueltas/35)*100)}%</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <button onClick={() => handleUpdate(selData.k, "vueltasChipa", Math.max(0, vueltas-1))} className="w-6 h-6 bg-white/10 rounded text-white font-black text-xs hover:bg-white/20">−</button>
+                          <input type="number" min="0" max="35" value={vueltas}
+                            onChange={e => handleUpdate(selData.k, "vueltasChipa", Math.min(35, Math.max(0, parseInt(e.target.value)||0)))}
+                            className="w-12 text-center bg-white/5 border border-white/10 rounded text-white text-[11px] font-black py-1 outline-none"/>
+                          <button onClick={() => handleUpdate(selData.k, "vueltasChipa", Math.min(35, vueltas+1))} className="w-6 h-6 bg-white/10 rounded text-white font-black text-xs hover:bg-white/20">+</button>
+                          <span className="text-[8px] text-muted">/ 35 vueltas</span>
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t border-white/10">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-white/10 h-4 rounded-full overflow-hidden">
+                            <div className="bg-gradient-to-r from-brand-orange to-brand-yellow h-full rounded-full transition-all"
+                              style={{width: Math.min(100, ((barras/12+vueltas/35)/2)*100) + "%"}}></div>
+                          </div>
+                          <span className="text-[10px] font-black text-white">{Math.round(((barras/12+vueltas/35)/2)*100)}%</span>
+                        </div>
+                        <p className="text-[7px] font-black text-muted uppercase mt-1">% Cumplitud armado general</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── REMATE UNITARIO ── */}
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[8px] font-black text-brand-red uppercase tracking-widest">Remate Unitario</p>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-16 bg-white/10 h-2 rounded-full overflow-hidden">
+                          <div className="bg-brand-red h-full rounded-full" style={{width: remChecksPct + "%"}}></div>
+                        </div>
+                        <span className="text-[9px] font-black text-brand-red">{remChecksPct}%</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      {[
+                        { key:"nivelacion",     label:"Nivelación OK" },
+                        { key:"plomada",        label:"Plomada OK" },
+                        { key:"recubrimiento",  label:"Recubrimiento OK" },
+                        { key:"superficie",     label:"Superficie OK" },
+                        { key:"curado",         label:"Curado OK" },
+                      ].map(({ key, label }) => (
+                        <div
+                          key={key}
+                          onClick={() => handleRemateCheck(selData.k, key, !remChecks[key])}
+                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition text-[9px] font-black uppercase
+                            ${remChecks[key] ? 'bg-brand-sage/10 border-brand-sage/50 text-brand-sage' : 'bg-white/3 border-white/5 text-muted hover:bg-white/8'}`}
+                        >
+                          <div className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[7px] shrink-0
+                            ${remChecks[key] ? 'bg-brand-sage text-black' : 'border border-white/25'}`}>
+                            {remChecks[key] ? '✓' : ''}
+                          </div>
+                          {label}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[7px] font-black text-muted mt-2">{remChecksCount}/5 ítems completados</p>
+                  </div>
+
+                  {/* ── OBSERVACIONES ── */}
+                  <div>
+                    <p className="text-[8px] font-black text-muted uppercase tracking-widest mb-2">Observaciones</p>
+                    <textarea
+                      rows={3}
+                      value={obs}
+                      onChange={e => handleUpdate(selData.k, "observaciones", e.target.value)}
+                      placeholder="Notas, inconvenientes, avances..."
+                      className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-[10px] text-white font-black outline-none resize-none placeholder:text-muted/50 focus:border-white/30"
+                    />
+                    <div className="mt-2">
+                      <p className="text-[8px] font-black text-muted uppercase mb-1.5">Foto / Imagen</p>
+                      <label className="block cursor-pointer">
+                        <div className={`w-full border border-dashed rounded-xl p-3 text-center text-[9px] font-black uppercase transition
+                          ${imgB64 ? 'border-brand-sage/50 bg-brand-sage/5' : 'border-white/20 hover:border-white/40 hover:bg-white/5'}`}>
+                          {imgB64 ? '✓ Imagen cargada — click para cambiar' : '📷 Seleccionar imagen / cámara'}
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={e => {
+                            const file = e.target.files[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = ev => handleUpdate(selData.k, "imagenBase64", ev.target.result);
+                            reader.readAsDataURL(file);
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                      {imgB64 && (
+                        <div className="mt-2 relative">
+                          <img src={imgB64} alt="Observación" className="w-full rounded-xl object-cover" style={{maxHeight:"160px"}}/>
+                          <button
+                            onClick={() => handleUpdate(selData.k, "imagenBase64", "")}
+                            className="absolute top-1 right-1 bg-black/70 text-white rounded-full w-6 h-6 text-[10px] font-black flex items-center justify-center hover:bg-brand-red"
+                          >✕</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="pt-4 border-t border-white/10 space-y-2">
                     <div className="flex justify-between text-[9px] font-black uppercase">
                       <span className="text-muted">Vol. Excavado</span>
@@ -1299,7 +1570,8 @@ function App() {
                     </div>
                   </div>
                 </div>
-              ) : (
+                );
+              })() : (
                 <div className="py-20 text-center flex flex-col items-center opacity-30">
                   <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4 text-2xl">🏗️</div>
                   <p className="text-[9px] font-black uppercase tracking-widest leading-loose">Selecciona unidad<br/>en el plano</p>
