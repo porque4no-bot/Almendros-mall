@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { doc, onSnapshot, setDoc, updateDoc, deleteField } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 /**
  * Escucha en tiempo real el documento principal:
@@ -23,18 +24,34 @@ export function useFirestoreSync(onData, onLoaded) {
   const unsubRef = useRef(null);
 
   useEffect(() => {
-    const docRef = doc(db, 'proyecto', 'almendros-mall');
-    unsubRef.current = onSnapshot(docRef, (snap) => {
-      if (snap.exists()) {
-        onData(snap.data());
+    // Esperar a que el usuario esté autenticado antes de escuchar Firestore.
+    // Sin esto, el listener se conecta antes del login y falla con permisos.
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      // Limpiar listener anterior si existe
+      if (unsubRef.current) {
+        unsubRef.current();
+        unsubRef.current = null;
       }
-      onLoaded();
-    }, () => {
-      // Error handler — still mark as loaded
-      onLoaded();
+
+      if (!user) {
+        onLoaded();
+        return;
+      }
+
+      const docRef = doc(db, 'proyecto', 'almendros-mall');
+      unsubRef.current = onSnapshot(docRef, (snap) => {
+        if (snap.exists()) {
+          onData(snap.data());
+        }
+        onLoaded();
+      }, () => {
+        // Error handler — still mark as loaded
+        onLoaded();
+      });
     });
 
     return () => {
+      unsubAuth();
       if (unsubRef.current) {
         unsubRef.current();
         unsubRef.current = null;
