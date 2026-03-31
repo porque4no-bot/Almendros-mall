@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark mode (default) — applied via html.dark */
+:root, .dark {
+  --bg-primary: #0D0D0D;
+  --bg-secondary: #1A1A1A;
+  --text-primary: #FFFFFF;
+  --text-secondary: #E2E8F0;
+  --text-muted: #94A3B8;
+  --text-white: #FFFFFF;
+  --grid-color: rgba(255,255,255,0.08);
+  --card-bg: rgba(255,255,255,0.07);
+  --card-border: rgba(255,255,255,0.15);
+}
+
+/* Light mode — applied when html does NOT have .dark */
+html.light-mode, html.light-mode :root {
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F5F5F5;
+  --text-primary: #1A1A1A;
+  --text-secondary: #2D3748;
+  --text-muted: #718096;
+  --text-white: #1A1A1A;
+  --grid-color: rgba(0,0,0,0.05);
+  --card-bg: rgba(211, 34, 55, 0.06);
+  --card-border: rgba(211, 34, 55, 0.25);
+}
+
+html.light-mode .berlin-card {
+  background: transparent !important;
+}
+
+html.light-mode main .text-white,
+html.light-mode main .text-white\/50,
+html.light-mode main .text-white\/60,
+html.light-mode main .text-white\/80 {
+  color: #1A1A1A !important;
+}
+
+html.light-mode main .text-muted,
+html.light-mode main .text-secondary {
+  color: #2D3748 !important;
+}
+
+html.light-mode main svg text[fill="#5A5F6F"],
+html.light-mode main svg text[fill="#475569"] {
+  fill: #1A1A1A !important;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Poppins', sans-serif;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+
+.sthin::-webkit-scrollbar { width: 6px; height: 6px; }
+.sthin::-webkit-scrollbar-thumb { background: #D32237; border-radius: 999px; }
+
+.berlin-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  backdrop-filter: blur(12px);
+}
+
+.transition-all { transition: all 0.3s cubic-bezier(0.4,0,0.2,1); }
+
+.bg-grid {
+  background-image:
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+.text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-muted); }
