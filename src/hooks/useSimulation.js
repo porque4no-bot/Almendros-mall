@@ -93,7 +93,7 @@ export function useSimulation() {
    *   @param {Object}  options.incidencias          Override de caissons bloqueados
    *   @param {number}  options.weatherFactor        Factor climático base (default 1.0)
    *   @param {Object}  options.performanceFactors   Factores de rendimiento por pareja
-   *   @param {number}  options.compressorBufferDays Buffer de compresor en días hábiles (default 3)
+   *   @param {Array}   options.incidencias          IDs de caissons bloqueados por incidencia
    */
   const runSim = useCallback((caissonsData, startDate, cuadrillas, options = {}) => {
     setLoading(true);

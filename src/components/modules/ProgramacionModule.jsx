@@ -566,64 +566,31 @@ function PairScheduleTab({ result }) {
   );
 }
 
-/** Tab "📦 Logística" — acero, compresor, resumen */
+/** Tab "📦 Logística" — resumen de caissons */
 function LogisticaTab({ result }) {
   if (!result) return null;
-  const { gantt, summary } = result;
-  const byLote1 = gantt.filter(r => r.loteAcero === 1).length;
-  const byLote2 = gantt.filter(r => r.loteAcero === 2).length;
+  const { gantt } = result;
   const yaExcavados = gantt.filter(r => r.excDays === 0).length;
+  const pendientes  = gantt.filter(r => r.excDays > 0).length;
+  const bloqueados  = gantt.filter(r => r.isBlocked).length;
   const sacrificios = gantt.filter(r => r.isSacrifice3 || r.isSacrifice15).length;
+  const enCritica   = gantt.filter(r => r.totalFloat <= 0 && r.vaciadoDay).length;
+
+  // Parejas activas y carga
+  const pairLoad = {};
+  for (const r of gantt) {
+    if (!r.pair) continue;
+    if (!pairLoad[r.pair]) pairLoad[r.pair] = { name: r.pairName, count: 0, days: 0 };
+    pairLoad[r.pair].count++;
+    pairLoad[r.pair].days += r.excDays || 0;
+  }
 
   return (
     <div className="p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {/* Acero */}
+      {/* Estado general */}
       <div className="berlin-card rounded-2xl p-4">
         <p className="text-[8px] font-black text-muted uppercase tracking-widest mb-3">
-          🔩 Acero
-        </p>
-        <div className="space-y-2 text-[9px]">
-          <div className="flex justify-between">
-            <span className="text-muted">Lote 1 disponible:</span>
-            <span className="font-black text-brand-yellow">{fmtDate(summary.steel1Date)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Lote 2 disponible:</span>
-            <span className="font-black text-brand-sage">{fmtDate(summary.steel2Date)}</span>
-          </div>
-          <div className="flex justify-between pt-2 border-t border-white/5">
-            <span className="text-muted">Distribución:</span>
-            <span className="font-black text-white">{byLote1} L1 · {byLote2} L2</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Compresor */}
-      <div className="berlin-card rounded-2xl p-4">
-        <p className="text-[8px] font-black text-muted uppercase tracking-widest mb-3">
-          💨 Compresor
-        </p>
-        <p className="text-[7px] text-muted/50 mb-2">K-7, K-15, K-16 (roca)</p>
-        <div className="space-y-2 text-[9px]">
-          <div className="flex justify-between">
-            <span className="text-muted">Solicitar:</span>
-            <span className="font-black text-white">{fmtDate(summary.compressor?.request)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Llegada:</span>
-            <span className="font-black text-white">{fmtDate(summary.compressor?.arrive)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Libre para excavar:</span>
-            <span className="font-black text-brand-red">{fmtDate(summary.compressor?.clear)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Caissons */}
-      <div className="berlin-card rounded-2xl p-4">
-        <p className="text-[8px] font-black text-muted uppercase tracking-widest mb-3">
-          📦 Caissons
+          📦 Estado de Caissons
         </p>
         <div className="space-y-2 text-[9px]">
           <div className="flex justify-between">
@@ -631,16 +598,62 @@ function LogisticaTab({ result }) {
             <span className="font-black text-brand-sage">{yaExcavados}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted">Bloqueados roca:</span>
-            <span className="font-black text-brand-red">3</span>
+            <span className="text-muted">Pendientes:</span>
+            <span className="font-black text-brand-yellow">{pendientes}</span>
+          </div>
+          {bloqueados > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted">Bloqueados (incidencia):</span>
+              <span className="font-black text-brand-red">{bloqueados}</span>
+            </div>
+          )}
+          <div className="flex justify-between">
+            <span className="text-muted">Sacrificio (mayor prof.):</span>
+            <span className="font-black text-brand-orange">{sacrificios}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted">Sacrificio prof.:</span>
-            <span className="font-black text-brand-orange">{sacrificios}</span>
+            <span className="text-muted">En ruta crítica:</span>
+            <span className="font-black text-brand-red">{enCritica}</span>
           </div>
           <div className="flex justify-between pt-2 border-t border-white/5">
             <span className="text-muted">Total caissons:</span>
             <span className="font-black text-white">{gantt.length}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Carga por pareja */}
+      <div className="berlin-card rounded-2xl p-4">
+        <p className="text-[8px] font-black text-muted uppercase tracking-widest mb-3">
+          👷 Carga por Pareja
+        </p>
+        <div className="space-y-2 text-[9px]">
+          {Object.entries(pairLoad).map(([pid, info]) => (
+            <div key={pid} className="flex justify-between">
+              <span className="text-muted">{info.name}:</span>
+              <span className="font-black text-white">{info.count} caissons · {info.days}d exc.</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Restricciones */}
+      <div className="berlin-card rounded-2xl p-4">
+        <p className="text-[8px] font-black text-muted uppercase tracking-widest mb-3">
+          ⚙️ Restricciones
+        </p>
+        <div className="space-y-2 text-[9px]">
+          <div className="flex justify-between">
+            <span className="text-muted">Castillo (acero):</span>
+            <span className="font-black text-white">1 por día</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted">Vaciado tras campana:</span>
+            <span className="font-black text-white">Día siguiente</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted">Rendimiento exc.:</span>
+            <span className="font-black text-white">1.4 m/día/pareja</span>
           </div>
         </div>
       </div>

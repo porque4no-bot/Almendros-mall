@@ -143,8 +143,7 @@ export async function exportGanttToExcel(result, baselineData, projectName = 'Al
     ['RECURSOS', ''],
     ['Total caissons', summary?.caissonCount || gantt.length],
     ['Parejas de excavación', summary?.pairCount || ''],
-    ['Lote acero 1', fmtD(summary?.steel1Date)],
-    ['Lote acero 2', fmtD(summary?.steel2Date)],
+    ['Castillo (acero)', '1 instalación por día'],
     ['', ''],
     ['RUTA CRÍTICA', ''],
     ['Caissons en ruta crítica', criticalPath.length],
@@ -200,7 +199,7 @@ export async function exportGanttToExcel(result, baselineData, projectName = 'Al
     { header: 'Vaciado',        key: 'vaciado',   width: 13 },
     { header: 'Holgura',        key: 'holgura',   width: 10 },
     { header: 'Ruta Crítica',   key: 'critica',   width: 12 },
-    { header: 'Lote Acero',     key: 'lote',      width: 11 },
+    { header: 'Bloqueado',      key: 'bloqueado',  width: 11 },
     { header: 'Grupo',          key: 'grupo',     width: 16 },
   ];
   wsP.columns = pCols;
@@ -221,7 +220,7 @@ export async function exportGanttToExcel(result, baselineData, projectName = 'Al
       vaciado:   fmtD(r.vaciadoDay),
       holgura:   r.totalFloat || 0,
       critica:   isCrit ? 'SI' : '',
-      lote:      r.loteAcero || '',
+      bloqueado: r.isBlocked ? 'SI' : '',
       grupo:     r.isSacrifice3 ? 'S3 (10m)' : r.isSacrifice15 ? 'S15 (8.5m)' : 'Normal',
     });
 
