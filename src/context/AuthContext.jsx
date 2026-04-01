@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -19,16 +19,27 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser]               = useState(null);
   const [role, setRole]               = useState('viewer');
+  const [approved, setApproved]       = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
+
+  // Flag para evitar que onAuthStateChanged cierre sesión durante el registro
+  const isRegisteringRef = useRef(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Bloquear usuarios con email no verificado (excepto Google, que llega pre-verificado)
-        if (!firebaseUser.emailVerified) {
+        // No cerrar sesión si estamos en medio de un registro
+        if (!firebaseUser.emailVerified && !isRegisteringRef.current) {
           await signOut(auth);
           setUser(null);
           setRole('viewer');
+          setApproved(false);
+          setLoadingAuth(false);
+          return;
+        }
+
+        // Si estamos registrando, no actualizar estado aún
+        if (isRegisteringRef.current) {
           setLoadingAuth(false);
           return;
         }
@@ -36,23 +47,47 @@ export function AuthProvider({ children }) {
         setUser(firebaseUser);
         try {
           const snap = await getDoc(doc(db, 'usuarios', firebaseUser.uid));
-          setRole(snap.exists() && snap.data().role ? snap.data().role : 'viewer');
+          if (snap.exists()) {
+            const data = snap.data();
+            setRole(data.role || 'viewer');
+            setApproved(data.approved === true);
+          } else {
+            setRole('viewer');
+            setApproved(false);
+          }
         } catch {
           setRole('viewer');
+          setApproved(false);
         }
       } else {
         setUser(null);
         setRole('viewer');
+        setApproved(false);
       }
       setLoadingAuth(false);
     });
     return unsub;
   }, []);
 
-  /** Login con Google (mantiene comportamiento existente) */
+  /** Login con Google */
   const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(auth, provider);
+    const googleEmail = result.user.email || '';
+    const isCorporate = googleEmail.endsWith(ALLOWED_DOMAIN);
+
+    const userDocRef = doc(db, 'usuarios', result.user.uid);
+    const snap = await getDoc(userDocRef);
+    if (!snap.exists()) {
+      await setDoc(userDocRef, {
+        email:     googleEmail,
+        nombre:    result.user.displayName || '',
+        telefono:  '',
+        role:      'viewer',
+        approved:  isCorporate,
+        createdAt: new Date().toISOString(),
+      });
+    }
   };
 
   /**
@@ -66,24 +101,28 @@ export function AuthProvider({ children }) {
    * @param {{ nombre: string, telefono: string }} userData
    */
   const registerWithEmail = async (email, password, userData) => {
-    const credential = await createUserWithEmailAndPassword(auth, email, password);
-    const { user } = credential;
+    isRegisteringRef.current = true;
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      const { user: newUser } = credential;
+      const isCorporate = email.endsWith(ALLOWED_DOMAIN);
 
-    // 1 — Actualizar displayName en Firebase Auth
-    await updateProfile(user, { displayName: userData.nombre });
+      await updateProfile(newUser, { displayName: userData.nombre });
 
-    // 2 — Crear documento en Firestore con role 'viewer' por defecto
-    await setDoc(doc(db, 'usuarios', user.uid), {
-      email,
-      nombre:    userData.nombre,
-      telefono:  userData.telefono,
-      role:      'viewer',
-      createdAt: new Date().toISOString(),
-    });
+      await setDoc(doc(db, 'usuarios', newUser.uid), {
+        email,
+        nombre:    userData.nombre,
+        telefono:  userData.telefono,
+        role:      'viewer',
+        approved:  isCorporate,
+        createdAt: new Date().toISOString(),
+      });
 
-    // 3 — Enviar verificación y forzar cierre de sesión
-    await sendEmailVerification(user);
-    await signOut(auth); // No puede entrar hasta verificar
+      await sendEmailVerification(newUser);
+      await signOut(auth);
+    } finally {
+      isRegisteringRef.current = false;
+    }
   };
 
   /**
@@ -91,8 +130,8 @@ export function AuthProvider({ children }) {
    * Verifica que el email esté confirmado antes de dejar entrar.
    */
   const loginWithEmail = async (email, password) => {
-    const result = await signInWithEmailAndPassword(auth, email, password);
-    if (!result.user.emailVerified) {
+    const res = await signInWithEmailAndPassword(auth, email, password);
+    if (!res.user.emailVerified) {
       await signOut(auth);
       const err = new Error('email-not-verified');
       err.code = 'auth/email-not-verified';
@@ -106,11 +145,8 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, role, loadingAuth,
-      loginWithGoogle,
-      loginWithEmail,
-      registerWithEmail,
-      logout,
+      user, role, approved, loadingAuth,
+      loginWithGoogle, loginWithEmail, registerWithEmail, logout,
     }}>
       {children}
     </AuthContext.Provider>

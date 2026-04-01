@@ -22,6 +22,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSimulation } from '../../hooks/useSimulation';
 import { getToday } from '../../utils/caissonUtils';
+import { exportGanttToExcel } from '../../utils/exportGanttExcel';
 import GanttChartVisual from './GanttChartVisual';
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -658,11 +659,19 @@ export default function ProgramacionModule({
   cuadrillas   = [],
   incidencias  = [],
   dailyLog     = {},
+  onSimResult,
 }) {
   const today = selDate || getToday();
   const { runSim, result, loading, error } = useSimulation();
 
   const [startDate, setStartDate] = useState(today);
+
+  // Notificar al padre cuando cambia el resultado de la simulación
+  useEffect(() => {
+    if (onSimResult && result) {
+      onSimResult({ ...result, startDate });
+    }
+  }, [result, startDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sincronizar startDate cuando cambia la fecha del calendario
   useEffect(() => {
@@ -809,6 +818,21 @@ export default function ProgramacionModule({
                 onChange={e => setStartDate(e.target.value)}
                 className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-red/50 transition"
               />
+            </div>
+
+            {/* Exportar a Excel */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[7px] font-black text-muted uppercase tracking-widest">
+                Exportar
+              </label>
+              <button
+                onClick={() => exportGanttToExcel(result, baselineData, 'Almendros Mall')}
+                disabled={!result || loading}
+                title="Descargar programación completa en Excel con diagrama de Gantt"
+                className="px-4 py-2 rounded-xl text-[8px] font-black uppercase tracking-wide transition border bg-white/5 border-white/10 text-muted hover:text-white hover:border-brand-sage/40 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                📥 Excel + Gantt
+              </button>
             </div>
           </div>
         </div>

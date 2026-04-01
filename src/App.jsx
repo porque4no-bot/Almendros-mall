@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { REND, ITEMS, CAISSONS } from './data/constants';
 import { useFirestoreSync, useBaselineData } from './hooks/useFirebaseData';
-import { runSimulation } from './utils/engine/simulation';
 import { getToday, defEntry, findC, calcC, calcGlobal } from './utils/caissonUtils';
 import { useAuth } from './context/AuthContext';
 import Login from './components/auth/Login';
@@ -36,6 +35,7 @@ export default function App() {
   const [showCuadrillas, setShowCuadrillas] = useState(false);
   const [mainTab, setMainTab] = useState('dashboard'); // 'dashboard' | 'programacion' | 'inventario'
   const [savingBaseline, setSavingBaseline] = useState(false);
+  const [simResult, setSimResult] = useState(null); // resultado actual de ProgramacionModule
   const [unsaved, setUnsaved] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const d = new Date(selDate);
@@ -384,27 +384,31 @@ export default function App() {
     };
   }, [baselineData, caissonsComparison, processed, selDate, rendimientoActual]);
 
-  /** Admin: ejecuta la simulación y fija el resultado en Firestore (proyecto/lineaBase) */
+  /** Admin: fija la simulación ACTUAL de ProgramacionModule como Línea Base en Firestore */
   const handleFijarLineaBase = useCallback(async () => {
+    if (!simResult) {
+      alert('No hay simulación activa. Abre la pestaña Programación y espera a que se ejecute la simulación.');
+      return;
+    }
     const msg = baselineData
       ? '⚠ Ya existe una Línea Base. ¿Deseas regenerarla y sobreescribirla?\n\nEsta acción cambiará el plan de referencia de toda la obra.'
       : '¿Fijar la Línea Base del proyecto?\n\nEsto registrará el cronograma planificado como referencia permanente. Asegúrate de que los datos iniciales de excavación sean correctos.';
     if (!confirm(msg)) return;
     setSavingBaseline(true);
     try {
-      const simResult = runSimulation(processed, '2026-03-26', cuadrillas);
+      const { startDate: simStartDate, ...simData } = simResult;
       await saveBaseline({
-        ...simResult,
+        ...simData,
         generatedAt:      new Date().toISOString(),
         generatedBy:      user?.displayName || user?.email || 'Admin',
-        projectStartDate: '2026-03-26',
+        projectStartDate: simStartDate || selDate,
       });
     } catch (err) {
       alert('Error al fijar línea base: ' + (err?.message || err));
     } finally {
       setSavingBaseline(false);
     }
-  }, [processed, saveBaseline, user, baselineData]);
+  }, [simResult, saveBaseline, user, baselineData, selDate]);
 
   const handleCrearIncidencia = useCallback((inc) => {
     const next = [...incidencias, inc];
@@ -628,6 +632,7 @@ export default function App() {
             cuadrillas={cuadrillas}
             incidencias={incidencias}
             dailyLog={dailyLog}
+            onSimResult={setSimResult}
           />
         )}
 
