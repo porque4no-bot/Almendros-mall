@@ -826,7 +826,7 @@ export default function ProgramacionModule({
                 Exportar
               </label>
               <button
-                onClick={() => exportGanttToExcel(result, baselineData, 'Almendros Mall')}
+                onClick={() => exportGanttToExcel(result, baselineData, 'Almendros Mall').catch(e => console.error('Export error:', e))}
                 disabled={!result || loading}
                 title="Descargar programación completa en Excel con diagrama de Gantt"
                 className="px-4 py-2 rounded-xl text-[8px] font-black uppercase tracking-wide transition border bg-white/5 border-white/10 text-muted hover:text-white hover:border-brand-sage/40 disabled:opacity-30 disabled:cursor-not-allowed"
